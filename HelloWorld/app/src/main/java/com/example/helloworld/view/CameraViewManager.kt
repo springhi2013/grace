@@ -28,6 +28,7 @@ import com.example.helloworld.MainActivity
 import com.example.helloworld.MyLogUtil
 import java.io.File
 import java.io.ByteArrayOutputStream
+import java.io.FileOutputStream
 
 
 class CameraViewManager(context: Context, attrs: AttributeSet?) : TextureView(context, attrs) {
@@ -62,6 +63,9 @@ class CameraViewManager(context: Context, attrs: AttributeSet?) : TextureView(co
     private var mSurfaceHeight: Integer? = null
 
     private var mVideoRoot: String? = null
+    private var localPath:String? = null
+
+
 
 
     init {
@@ -72,6 +76,7 @@ class CameraViewManager(context: Context, attrs: AttributeSet?) : TextureView(co
         mVideoRoot = "/storage/sdcard0/1.mp4"
         log("path:" + mVideoRoot)
         printCameraList();
+        localPath = context.filesDir.absolutePath
     }
 
     private fun printCameraList() {
@@ -278,11 +283,11 @@ class CameraViewManager(context: Context, attrs: AttributeSet?) : TextureView(co
 
                 val pixelStride: Int = planes[2].pixelStride
                 val rowOffset: Int = planes[2].rowStride
-                val nv21: ByteArray = ByteArray(i420Size)
+                val nv21 = ByteArray(i420Size)
 
-                val yRawSrcBytes: ByteArray = ByteArray(remaining0)
-                val uRawSrcBytes: ByteArray = ByteArray(remaining1)
-                val vRawSrcBytes: ByteArray = ByteArray(remaining2)
+                val yRawSrcBytes = ByteArray(remaining0)
+                val uRawSrcBytes = ByteArray(remaining1)
+                val vRawSrcBytes = ByteArray(remaining2)
 
                 planes[0].buffer.get(yRawSrcBytes)
                 planes[1].buffer.get(uRawSrcBytes)
@@ -326,6 +331,8 @@ class CameraViewManager(context: Context, attrs: AttributeSet?) : TextureView(co
 
                 var bitmap: Bitmap = getBitmapImageFromYUV(nv21, imgWidth, imgHeight)
 
+                mHandler.postDelayed({  saveBitmapToLocal(bitmap,localPath + System.currentTimeMillis() + ".jpg")},1 * 1000)
+
 
 //                val buffer = image.planes[0].buffer
 //                val data = ByteArray(buffer.remaining())
@@ -336,12 +343,26 @@ class CameraViewManager(context: Context, attrs: AttributeSet?) : TextureView(co
         }
     }
 
+    fun saveBitmapToLocal(bitmap: Bitmap, localPath: String) {
+        Thread() {
+            fun run() {
+                val file = File(localPath)
+                if (!file.exists()) {
+                    val ftf = FileOutputStream(file)
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 90, ftf)
+                    ftf.flush()
+                    ftf.close()
+                }
+            }
+        }.start()
+    }
+
 
     fun getBitmapImageFromYUV(data: ByteArray, width: Int, height: Int): Bitmap {
         val yuvimage: YuvImage = YuvImage(data, ImageFormat.NV21, width, height, null)
         val baos = ByteArrayOutputStream()
         yuvimage.compressToJpeg(Rect(0, 0, width, height), 80, baos)
-        val jdata : ByteArray = baos.toByteArray()
+        val jdata: ByteArray = baos.toByteArray()
         val bitmapFactoryOptions: BitmapFactory.Options = BitmapFactory.Options()
         bitmapFactoryOptions.inPreferredConfig = Bitmap.Config.RGB_565
 
