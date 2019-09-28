@@ -8,7 +8,6 @@ import android.hardware.camera2.*
 import android.util.AttributeSet
 import android.view.TextureView
 import androidx.core.content.ContextCompat
-import android.util.Log
 import android.view.Surface
 import java.util.*
 import android.hardware.camera2.CameraCharacteristics
@@ -19,7 +18,6 @@ import android.media.ImageReader
 import android.media.MediaRecorder
 import android.os.*
 import java.lang.Exception
-import kotlin.collections.ArrayList
 import android.app.Activity
 import android.graphics.*
 import android.media.Image
@@ -63,9 +61,7 @@ class CameraViewManager(context: Context, attrs: AttributeSet?) : TextureView(co
     private var mSurfaceHeight: Integer? = null
 
     private var mVideoRoot: String? = null
-    private var localPath:String? = null
-
-
+    private var localPath: String? = null
 
 
     init {
@@ -270,12 +266,15 @@ class CameraViewManager(context: Context, attrs: AttributeSet?) : TextureView(co
     inner class ImageReaderONImage : ImageReader.OnImageAvailableListener {
         override fun onImageAvailable(reader: ImageReader?) {
             log("onImageAvailable--")
-            val image = reader?.acquireNextImage()
-            if (null != image) {
-                val imgWidth: Int = image.width
-                val imgHeight: Int = image.height
-                val i420Size: Int = imgWidth * imgHeight * 3 / 2
+            try {
+                val image = reader?.acquireNextImage() ?: return
+                val w: Int = image.width
+                val h: Int = image.height
+                
+                val i420Size: Int = w * h * 3 / 2
                 val planes: Array<Image.Plane> = image.planes
+
+                log("image--w--$w--h: $h--i420size:$i420Size--planesSize:${planes.size}")
 
                 val remaining0: Int = planes[0].buffer.remaining()
                 val remaining1: Int = planes[1].buffer.remaining()
@@ -293,57 +292,50 @@ class CameraViewManager(context: Context, attrs: AttributeSet?) : TextureView(co
                 planes[1].buffer.get(uRawSrcBytes)
                 planes[2].buffer.get(vRawSrcBytes)
 
+                log("pixelStride$pixelStride--width$width--remaining0--$remaining0--remaining1--$remaining1--remaining2--$remaining2")
+
                 if (pixelStride == width) {
                     // 两者相等,说明每个YUV块紧密相连，可以直接复制
-                    System.arraycopy(yRawSrcBytes, 0, nv21, 0, rowOffset * imgHeight)
-                    System.arraycopy(vRawSrcBytes, 0, nv21, rowOffset * imgHeight, rowOffset * imgHeight / 2 - 1)
+                    System.arraycopy(yRawSrcBytes, 0, nv21, 0, rowOffset * h)
+                    System.arraycopy(vRawSrcBytes, 0, nv21, rowOffset * h, rowOffset * h / 2 - 1)
                 } else {
-                    val ySrcBytes: ByteArray = ByteArray(imgWidth * imgHeight)
-                    val uSrcBytes: ByteArray = ByteArray(imgWidth * imgHeight / 2 - 1)
-                    val vSrcBytes: ByteArray = ByteArray(imgWidth * imgHeight / 2 - 1)
-                    for (row in 0..imgHeight) {
-                        System.arraycopy(yRawSrcBytes, rowOffset * row, ySrcBytes, imgWidth * row, imgWidth)
+                    val ySrcBytes = ByteArray(w * h)
+                    val uSrcBytes = ByteArray(w * h / 2 - 1)
+                    val vSrcBytes = ByteArray(w * h / 2 - 1)
+                    for (row in 0..(h -1)) {
+                        log("imgC---$row")
+                        System.arraycopy(yRawSrcBytes, rowOffset * row, ySrcBytes, w * row, w)
                         if (0 == row % 2) {
-                            if (row == imgHeight - 2) {
-                                System.arraycopy(
-                                    vRawSrcBytes,
-                                    rowOffset * row / 2,
-                                    vSrcBytes,
-                                    imgWidth * row / 2,
-                                    imgWidth - 1
-                                )
+                            if (row == h - 1) {
+                                System.arraycopy(vRawSrcBytes, rowOffset * row / 2, vSrcBytes, w * row / 2, w - 1)
                             } else {
-                                System.arraycopy(
-                                    vRawSrcBytes,
-                                    rowOffset * row / 2,
-                                    vSrcBytes,
-                                    imgWidth * row / 2,
-                                    imgWidth
-                                )
+                                System.arraycopy(vRawSrcBytes, rowOffset * row / 2, vSrcBytes, w * row / 2, w)
                             }
                         }
-                    }
+                    } // end for
 
                     // yuv拷贝到一个数组里面
-                    System.arraycopy(ySrcBytes, 0, nv21, 0, imgWidth * imgHeight)
-                    System.arraycopy(vSrcBytes, 0, nv21, imgWidth * imgHeight, imgWidth * imgHeight / 2 - 1)
+                    System.arraycopy(ySrcBytes, 0, nv21, 0, w * h)
+                    System.arraycopy(vSrcBytes, 0, nv21, w * h, w * h / 2 - 1)
                 }
 
-                var bitmap: Bitmap = getBitmapImageFromYUV(nv21, imgWidth, imgHeight)
+                var bitmap: Bitmap = getBitmapImageFromYUV(nv21, w, h)
 
-                mHandler.postDelayed({  saveBitmapToLocal(bitmap,localPath + System.currentTimeMillis() + ".jpg")},1 * 1000)
+                image.close()
 
-
-//                val buffer = image.planes[0].buffer
-//                val data = ByteArray(buffer.remaining())
-//                buffer.get(data)
-//                log("onImageAvailable--size:" + data.size)
-//                image.close()
+                mHandler.postDelayed(
+                    { saveBitmapToLocal(bitmap, localPath + System.currentTimeMillis() + ".jpg") },
+                    1 * 1000)
+            } catch (e:Exception) {
+                e.printStackTrace()
+                log(e.toString())
             }
+
         }
     }
 
     fun saveBitmapToLocal(bitmap: Bitmap, localPath: String) {
+        log("saveBitmapToLocal$localPath")
         Thread() {
             fun run() {
                 val file = File(localPath)
