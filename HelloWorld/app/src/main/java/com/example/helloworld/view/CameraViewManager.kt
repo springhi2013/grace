@@ -1,6 +1,7 @@
 package com.example.helloworld.view
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.hardware.camera2.*
@@ -20,6 +21,7 @@ import android.os.*
 import java.lang.Exception
 import android.app.Activity
 import android.graphics.*
+import android.graphics.BitmapFactory.Options
 import android.media.Image
 import androidx.core.app.ActivityCompat
 import com.example.helloworld.MainActivity
@@ -63,6 +65,8 @@ class CameraViewManager(context: Context, attrs: AttributeSet?) : TextureView(co
     private var mVideoRoot: String? = null
     private var localPath: String? = null
 
+    private var refreshBitmap: IRefreshBitmap? = null
+
 
     init {
         mCameraManager = mContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -72,7 +76,20 @@ class CameraViewManager(context: Context, attrs: AttributeSet?) : TextureView(co
         mVideoRoot = "/storage/sdcard0/1.mp4"
         log("path:" + mVideoRoot)
         printCameraList();
-        localPath = context.filesDir.absolutePath
+        localPath = "/storage/self/primary/testYUV"
+
+        createNewFile1(localPath + "/abc.txt")
+    }
+
+    private fun createNewFile1(path: String){
+        try {
+            val file = File(path)
+            if (!file.exists()) {
+                file.createNewFile()
+            }
+        } catch (e: Exception){
+            e.printStackTrace()
+        }
     }
 
     private fun printCameraList() {
@@ -80,6 +97,11 @@ class CameraViewManager(context: Context, attrs: AttributeSet?) : TextureView(co
         for (item in list) {
             log(" camera: " + item)
         }
+    }
+
+    fun setBackcall(fn: IRefreshBitmap?) {
+        log("setBackcall-------")
+        refreshBitmap = fn
     }
 
     fun startBackgroundThread() {
@@ -266,87 +288,134 @@ class CameraViewManager(context: Context, attrs: AttributeSet?) : TextureView(co
     inner class ImageReaderONImage : ImageReader.OnImageAvailableListener {
         override fun onImageAvailable(reader: ImageReader?) {
             log("onImageAvailable--")
-            try {
-                val image = reader?.acquireNextImage() ?: return
-                val w: Int = image.width
-                val h: Int = image.height
-                
-                val i420Size: Int = w * h * 3 / 2
-                val planes: Array<Image.Plane> = image.planes
+            val image = reader?.acquireNextImage();
+            if (null != image) {
 
-                log("image--w--$w--h: $h--i420size:$i420Size--planesSize:${planes.size}")
+                val imageWidth: Int = image.width
+                val imageHeight: Int = image.height
+                val data68 = ImageUtils.getBytesFromImageAsType(image, 2)
+                val rgb = ImageUtils.decodeYUV420SP(data68, imageWidth, imageHeight)
+                // 通过RGB来创建Bitmap
+                val bitmap = Bitmap.createBitmap(
+                    rgb, 0, imageWidth, imageWidth, imageHeight,
+                    Bitmap.Config.ARGB_8888)
 
-                val remaining0: Int = planes[0].buffer.remaining()
-                val remaining1: Int = planes[1].buffer.remaining()
-                val remaining2: Int = planes[2].buffer.remaining()
+                log("Notify To Bitmap-------")
 
-                val pixelStride: Int = planes[2].pixelStride
-                val rowOffset: Int = planes[2].rowStride
-                val nv21 = ByteArray(i420Size)
+                refreshBitmap?.newBitmap(bitmap)
 
-                val yRawSrcBytes = ByteArray(remaining0)
-                val uRawSrcBytes = ByteArray(remaining1)
-                val vRawSrcBytes = ByteArray(remaining2)
 
-                planes[0].buffer.get(yRawSrcBytes)
-                planes[1].buffer.get(uRawSrcBytes)
-                planes[2].buffer.get(vRawSrcBytes)
-
-                log("pixelStride$pixelStride--width$width--remaining0--$remaining0--remaining1--$remaining1--remaining2--$remaining2")
-
-                if (pixelStride == width) {
-                    // 两者相等,说明每个YUV块紧密相连，可以直接复制
-                    System.arraycopy(yRawSrcBytes, 0, nv21, 0, rowOffset * h)
-                    System.arraycopy(vRawSrcBytes, 0, nv21, rowOffset * h, rowOffset * h / 2 - 1)
-                } else {
-                    val ySrcBytes = ByteArray(w * h)
-                    val uSrcBytes = ByteArray(w * h / 2 - 1)
-                    val vSrcBytes = ByteArray(w * h / 2 - 1)
-                    for (row in 0..(h -1)) {
-                        log("imgC---$row")
-                        System.arraycopy(yRawSrcBytes, rowOffset * row, ySrcBytes, w * row, w)
-                        if (0 == row % 2) {
-                            if (row == h - 1) {
-                                System.arraycopy(vRawSrcBytes, rowOffset * row / 2, vSrcBytes, w * row / 2, w - 1)
-                            } else {
-                                System.arraycopy(vRawSrcBytes, rowOffset * row / 2, vSrcBytes, w * row / 2, w)
-                            }
-                        }
-                    } // end for
-
-                    // yuv拷贝到一个数组里面
-                    System.arraycopy(ySrcBytes, 0, nv21, 0, w * h)
-                    System.arraycopy(vSrcBytes, 0, nv21, w * h, w * h / 2 - 1)
-                }
-
-                var bitmap: Bitmap = getBitmapImageFromYUV(nv21, w, h)
-
-                image.close()
+//                val bitmap: Bitmap? = imageToBitmap(image)
 
                 mHandler.postDelayed(
-                    { saveBitmapToLocal(bitmap, localPath + System.currentTimeMillis() + ".jpg") },
-                    1 * 1000)
-            } catch (e:Exception) {
-                e.printStackTrace()
-                log(e.toString())
+                    { saveBitmapToLocal(bitmap!!, localPath +"/"+ System.currentTimeMillis() + ".jpg") },
+                    1 * 1000
+                )
+                image.close()
             }
 
         }
     }
 
-    fun saveBitmapToLocal(bitmap: Bitmap, localPath: String) {
-        log("saveBitmapToLocal$localPath")
-        Thread() {
-            fun run() {
-                val file = File(localPath)
-                if (!file.exists()) {
-                    val ftf = FileOutputStream(file)
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 90, ftf)
-                    ftf.flush()
-                    ftf.close()
-                }
+    fun imageToBitmap(image: Image): Bitmap? {
+        try {
+            val w: Int = image.width
+            val h: Int = image.height
+
+            val i420Size: Int = w * h * 3 / 2
+            val planes: Array<Image.Plane> = image.planes
+
+            log("image--w--$w--h: $h--i420size:$i420Size--planesSize:${planes.size}")
+
+            val remaining0: Int = planes[0].buffer.remaining()
+            val remaining1: Int = planes[1].buffer.remaining()
+            val remaining2: Int = planes[2].buffer.remaining()
+
+            val pixelStride: Int = planes[2].pixelStride
+            val rowOffset: Int = planes[2].rowStride
+            val nv21 = ByteArray(i420Size)
+
+            val yRawSrcBytes = ByteArray(remaining0)
+            val uRawSrcBytes = ByteArray(remaining1)
+            val vRawSrcBytes = ByteArray(remaining2)
+
+            planes[0].buffer.get(yRawSrcBytes)
+            planes[1].buffer.get(uRawSrcBytes)
+            planes[2].buffer.get(vRawSrcBytes)
+
+            log("pixelStride$pixelStride--width$width--remaining0--$remaining0--remaining1--$remaining1--remaining2--$remaining2")
+
+            if (pixelStride == width) {
+                // 两者相等,说明每个YUV块紧密相连，可以直接复制
+                System.arraycopy(yRawSrcBytes, 0, nv21, 0, rowOffset * h)
+                System.arraycopy(vRawSrcBytes, 0, nv21, rowOffset * h, rowOffset * h / 2 - 1)
+            } else {
+                val ySrcBytes = ByteArray(w * h)
+                val uSrcBytes = ByteArray(w * h / 2 - 1)
+                val vSrcBytes = ByteArray(w * h / 2 - 1)
+                for (row in 0..(h - 1)) {
+                    log("imgC---$row")
+                    System.arraycopy(yRawSrcBytes, rowOffset * row, ySrcBytes, w * row, w)
+                    if (0 == row % 2) {
+                        if (row == h - 1) {
+                            System.arraycopy(vRawSrcBytes, rowOffset * row / 2, vSrcBytes, w * row / 2, w - 1)
+                        } else {
+                            System.arraycopy(vRawSrcBytes, rowOffset * row / 2, vSrcBytes, w * row / 2, w)
+                        }
+                    }
+                } // end for
+
+                // yuv拷贝到一个数组里面
+                System.arraycopy(ySrcBytes, 0, nv21, 0, w * h)
+                System.arraycopy(vSrcBytes, 0, nv21, w * h, w * h / 2 - 1)
             }
-        }.start()
+
+            var bitmap: Bitmap = getBitmapImageFromYUV(nv21, w, h)
+
+            image.close()
+
+            return bitmap
+
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+            log(e.toString())
+        }
+
+        return null;
+    }
+
+
+    @SuppressLint("WrongThread")
+    fun saveBitmapToLocal(bitmap: Bitmap, localPath: String) {
+        log("saveBitmapToLocal   $localPath")
+
+        val file = File(localPath)
+        if (!file.exists()) {
+            file.createNewFile()
+            try {
+                val ftf = FileOutputStream(file)
+                log("saveBitmapToLocal--will Write")
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, ftf)
+                ftf.flush()
+                ftf.close()
+
+                log("saveBitmapToLocal--Success")
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+        } else {
+            log("saveBitmapToLocal--file exist")
+
+        }
+
+
+//        Thread() {
+//            fun run() {
+//
+//            }
+//        }.start()
     }
 
 
@@ -355,7 +424,7 @@ class CameraViewManager(context: Context, attrs: AttributeSet?) : TextureView(co
         val baos = ByteArrayOutputStream()
         yuvimage.compressToJpeg(Rect(0, 0, width, height), 80, baos)
         val jdata: ByteArray = baos.toByteArray()
-        val bitmapFactoryOptions: BitmapFactory.Options = BitmapFactory.Options()
+        val bitmapFactoryOptions: Options = Options()
         bitmapFactoryOptions.inPreferredConfig = Bitmap.Config.RGB_565
 
         return BitmapFactory.decodeByteArray(jdata, 0, jdata.size, bitmapFactoryOptions)
