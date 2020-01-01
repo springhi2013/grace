@@ -20,7 +20,10 @@ class MainActivity : AppCompatActivity() , IRefreshBitmap {
         refreSmall(bitmap)    }
 
     private var mCameraManager: CameraViewManager? = null
+    private var mMiddleView : ImageButton? = null
     private val mSmallView : ImageButton? = null
+    private var abc: Int = 0
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

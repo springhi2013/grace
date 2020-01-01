@@ -2,11 +2,15 @@ package com.example.helloworld.opengl
 
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
+import com.example.helloworld.AssetUtils
 import java.nio.FloatBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
+import android.content.Context
+import com.example.helloworld.MyLogUtil
+import com.example.helloworld.R
 
-class TriggerRender : GLSurfaceView.Renderer {
+class TriggerRender(context: Context) : GLSurfaceView.Renderer {
 
     // 三角形的三个顶点
     internal var triangleCoords = floatArrayOf(
@@ -16,19 +20,6 @@ class TriggerRender : GLSurfaceView.Renderer {
     )
     private var color = floatArrayOf(1.0f, 0f, 0f, 1.0f) //red
     private var vertexBuffer: FloatBuffer? = null
-
-    // 顶点着色器
-    private val vertexShaderCode = "attribute vec4 vPosition;" +
-            "void main() {" +
-            "  gl_Position = vPosition;" +
-            "}"
-
-    // 片段着色器
-    private val fragmentShaderCode = "precision mediump float;" +
-            "uniform vec4 vColor;" +
-            "void main() {" +
-            "  gl_FragColor = vColor;" +
-            "}"
 
 
     private val COORDS_PER_VERTEX = 3
@@ -40,14 +31,22 @@ class TriggerRender : GLSurfaceView.Renderer {
     //顶点之间的偏移量
     private val vertexStride = COORDS_PER_VERTEX * 4 // 每个顶点四个字节
 
+    private val mContext: Context = context
+
     override fun onSurfaceCreated(gl10: GL10, eglConfig: EGLConfig) {
         //将背景设置为灰色
+        MyLogUtil.log("TriggerRender--onSurfaceCreated ${Thread.currentThread().name}")
         GLES20.glClearColor(0.5f, 0.5f, 0.5f, 1.0f)
         //将坐标数据转换为FloatBuffer，用以传入给OpenGL ES程序
         vertexBuffer = BufferUtil.fBuffer(triangleCoords)
 
-        val vertexShader = loadShader(GLES20.GL_VERTEX_SHADER, vertexShaderCode)
-        val fragmentShader = loadShader(GLES20.GL_FRAGMENT_SHADER, fragmentShaderCode)
+        val vertexShader = loadShader(
+            GLES20.GL_VERTEX_SHADER,
+            AssetUtils.readRaw(mContext, R.raw.trigger_vertex_shader)
+        )
+
+        val fragmentShader = loadShader(GLES20.GL_FRAGMENT_SHADER,
+                AssetUtils.readRaw(mContext, R.raw.trigger_fragment_shader))
 
         //创建一个空的OpenGLES程序
         mProgram = GLES20.glCreateProgram()
@@ -60,10 +59,12 @@ class TriggerRender : GLSurfaceView.Renderer {
     }
 
     override fun onSurfaceChanged(gl10: GL10, width: Int, height: Int) {
+        MyLogUtil.log("TriggerRender--onSurfaceChanged  ${Thread.currentThread().name}")
         GLES20.glViewport(0, 0, width, height)
     }
 
     override fun onDrawFrame(gl10: GL10) {
+        MyLogUtil.log("TriggerRender--onDrawFrame  ${Thread.currentThread().name}")
         //将程序加入到OpenGLES2.0环境(加载)
         GLES20.glUseProgram(mProgram)
 
@@ -80,6 +81,8 @@ class TriggerRender : GLSurfaceView.Renderer {
             vertexStride,
             vertexBuffer
         )
+
+
         //获取片元着色器的vColor成员的句柄
         mColorHandle = GLES20.glGetUniformLocation(mProgram, "vColor")
         //设置绘制三角形的颜色
