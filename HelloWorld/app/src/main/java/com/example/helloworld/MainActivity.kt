@@ -30,6 +30,8 @@ class MainActivity : AppCompatActivity() , IRefreshBitmap {
 
     private var name = ""
 
+    private var address = ""
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
