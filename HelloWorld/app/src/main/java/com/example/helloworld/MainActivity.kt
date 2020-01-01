@@ -32,6 +32,10 @@ class MainActivity : AppCompatActivity() , IRefreshBitmap {
 
     private var age:Int = 0
 
+    private var homeAddress = ""
+
+    private var home2Address = ""
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
