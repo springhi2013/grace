@@ -28,6 +28,8 @@ class MainActivity : AppCompatActivity() , IRefreshBitmap {
     private val mSmallView : ImageButton? = null
     private var abc: Int = 0
 
+    private var name = ""
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
