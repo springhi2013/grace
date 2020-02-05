@@ -30,15 +30,22 @@ class MainActivity : AppCompatActivity() , IRefreshBitmap {
 
     private var name = ""
 
-<<<<<<< HEAD
     private var address = ""
-=======
     private var age:Int = 0
->>>>>>> 4122c2fd617ccf183fd0bd5cb978ff38a7e438d0
+
+    private var address = ""
+
+    private var age:Int = 0
+
 
     private var homeAddress = ""
 
     private var home2Address = ""
+    private var address = ""
+
+    private var addToFive = ""
+
+    private var addToFive = ""
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
