@@ -45,7 +45,15 @@ class MainActivity : AppCompatActivity() , IRefreshBitmap {
 
     private var addToFive = ""
 
-    private var addToFive = ""
+    private var addToSix = ""
+
+    private var addToEight = ""
+
+    private var addToSeven = "";
+
+    private var addToNigh
+
+    private var addToTen
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
